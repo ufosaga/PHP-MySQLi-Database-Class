@@ -378,7 +378,7 @@ class dbObject {
      * @return dbObject
      */
     private function with ($objectName) {
-        if (!property_exists ($this, 'relations') && !isset ($this->relations[$name]))
+        if (!property_exists ($this, 'relations') && !isset ($this->relations[$objectName]))
             die ("No relation with name $objectName found");
 
         $this->_with[$objectName] = $this->relations[$objectName];
@@ -701,5 +701,11 @@ class dbObject {
         else
             static::$modelPath = __DIR__ . "/models/";
         spl_autoload_register ("dbObject::dbObjectAutoload");
+    }
+
+    public function getLastError() {
+        $err = empty($this->errors) ? json_encode($this->errors, JSON_UNESCAPED_UNICODE) : ' ';
+        $err .= $this->db->getLastError() ?: '';
+        return $err;
     }
 }
