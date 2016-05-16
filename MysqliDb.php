@@ -1477,9 +1477,12 @@ class MysqliDb
     protected function _prepareQuery()
     {
         if (!$stmt = $this->mysqli()->prepare($this->_query)) {
-            $msg = "Problem preparing query ($this->_query) " . $this->mysqli()->error;
-            $this->reset();
-            throw new Exception($msg);
+            if (!$this->ping() || !$stmt = $this->mysqli()->prepare($this->_query)) {
+                $msg = "Problem preparing query ($this->_query) [{$this->mysqli()->errno}] " .
+                    $this->mysqli()->error;
+                $this->reset();
+                throw new Exception($msg);
+            }
         }
 
         if ($this->traceEnabled) {
