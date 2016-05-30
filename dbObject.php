@@ -80,6 +80,13 @@ class dbObject {
      *
      * @var int
      */
+    /**
+     * An array that holds the changes flag for keys
+     *
+     * @var array
+     */
+    private $_changeFlags = array();
+
     public static $pageLimit = 20;
     /**
      * Variable that holds total pages count of last paginate() query
@@ -124,6 +131,17 @@ class dbObject {
      * @return mixed
      */
     public function __set ($name, $value) {
+        if (isset($this->data[$name])) {
+            $oldValue = $this->data[$name];
+        }
+        if (!isset($oldValue) || $oldValue != $value) {
+            if (isset($this->_changeFlags[$name])) {
+                $this->_changeFlags[$name] += 1;
+            } else {
+                $this->_changeFlags[$name] = 0;
+            }
+        }
+
         $this->data[$name] = $value;
     }
 
@@ -401,11 +419,15 @@ class dbObject {
         $joinObj = new $objectName;
         if (!$key)
             $key = $objectName . "id";
-	if (!$primaryKey)
-            $primaryKey = $joinObj->primaryKey;
+
+        if (!$primaryKey)
+            $primaryKey = MysqliDb::$prefix . $joinObj->dbTable . "." . $joinObj->primaryKey;
 		
-        $joinStr = MysqliDb::$prefix . $this->dbTable . ".{$key} = " .
-                    MysqliDb::$prefix . "{$joinObj->dbTable}.{$primaryKey}";
+        if (!strchr ($key, '.'))
+            $joinStr = MysqliDb::$prefix . $this->dbTable . ".{$key} = " . $primaryKey;
+        else
+            $joinStr = MysqliDb::$prefix . "{$key} = " . $primaryKey;
+
         $this->db->join ($joinObj->dbTable, $joinStr, $joinType);
         return $this;
     }
@@ -522,11 +544,11 @@ class dbObject {
                 $obj = new $modelName;
                 $table = $obj->dbTable;
                 $primaryKey = $obj->primaryKey;
-				
+
                 if (!isset ($data[$table])) {
                     $data[$name] = $this->$name;
                     continue;
-                } 
+                }
                 if ($data[$table][$primaryKey] === null) {
                     $data[$name] = null;
                 } else {
@@ -589,6 +611,12 @@ class dbObject {
         if (!$this->dbFields)
             return true;
 
+        if (count($data) < 2) {
+            $this->errors[] = 'Invalid fields count:' . var_export($data, true);
+            T::say(json_encode($this->errors, JSON_UNESCAPED_UNICODE));
+            return false;
+        }
+
         foreach ($this->dbFields as $key => $desc) {
             $type = null;
             $required = false;
@@ -605,32 +633,33 @@ class dbObject {
             if (isset ($desc[1]) && ($desc[1] == 'required'))
                 $required = true;
 
-            if ($required && strlen ($value) == 0) {
-                $this->errors[] = Array ($this->dbTable . "." . $key => "is required");
-                continue;
-            }
+//            if ($required && strlen ($value) == 0) {
+//                $this->errors[] = Array ($this->dbTable . "." . $key => "is required");
+//                continue;
+//            }
+
             if ($value == null)
                 continue;
 
             switch ($type) {
-                case "text";
-                    $regexp = null;
-                    break;
-                case "int":
-                    $regexp = "/^[0-9]*$/";
-                    break;
-                case "double":
-                    $regexp = "/^[0-9\.]*$/";
-                    break;
-                case "bool":
-                    $regexp = '/^[yes|no|0|1|true|false]$/i';
-                    break;
-                case "datetime":
-                    $regexp = "/^[0-9a-zA-Z -:]*$/";
-                    break;
-                default:
-                    $regexp = $type;
-                    break;
+            case "text";
+                $regexp = null;
+                break;
+            case "int":
+                $regexp = "/^[0-9]*$/";
+                break;
+            case "double":
+                $regexp = "/^[0-9\.]*$/";
+                break;
+            case "bool":
+                $regexp = '/^[yes|no|0|1|true|false]$/i';
+                break;
+            case "datetime":
+                $regexp = "/^[0-9a-zA-Z -:]*$/";
+                break;
+            default:
+                $regexp = $type;
+                break;
             }
             if (!$regexp)
                 continue;
@@ -655,7 +684,13 @@ class dbObject {
         if (!$this->dbFields)
             return $this->data;
 
+        $this->_changeFlags[$this->primaryKey] = 1;
         foreach ($this->data as $key => &$value) {
+            if (!$this->_changeFlags[$key]) {
+                continue;
+            }
+            $this->_changeFlags[$key] -= 1;
+
             if ($value instanceof dbObject && $value->isNew == true) {
                 $id = $value->save();
                 if ($id)
@@ -704,7 +739,7 @@ class dbObject {
     }
 
     public function getLastError() {
-        $err = empty($this->errors) ? json_encode($this->errors, JSON_UNESCAPED_UNICODE) : ' ';
+        $err = empty($this->errors) ? '' : json_encode($this->errors, JSON_UNESCAPED_UNICODE);
         $err .= $this->db->getLastError() ?: '';
         return $err;
     }

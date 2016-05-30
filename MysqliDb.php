@@ -7,10 +7,10 @@
  * @author    Jeffery Way <jeffrey@jeffrey-way.com>
  * @author    Josh Campbell <jcampbell@ajillion.com>
  * @author    Alexander V. Butenko <a.butenka@gmail.com>
- * @copyright Copyright (c) 2010
+ * @copyright Copyright (c) 2010-2016
  * @license   http://opensource.org/licenses/gpl-3.0.html GNU Public License
  * @link      http://github.com/joshcam/PHP-MySQLi-Database-Class 
- * @version   2.6-master
+ * @version   2.7-master
  */
 
 class MysqliDb
@@ -105,6 +105,12 @@ class MysqliDb
      * @var string
      */
     protected $_stmtError;
+
+    /**
+     * Variable which holds last statement error code
+     * @var int
+     */
+    protected $_stmtErrno;
 
     /**
      * Database credentials
@@ -393,6 +399,7 @@ class MysqliDb
         $stmt->execute();
         $this->count = $stmt->affected_rows;
         $this->_stmtError = $stmt->error;
+        $this->_stmtErrno = $stmt->errno;
         $this->_lastQuery = $this->replacePlaceHolders($this->_query, $params);
         $res = $this->_dynamicBindResults($stmt);
         $this->reset();
@@ -464,6 +471,7 @@ class MysqliDb
         $stmt = $this->_buildQuery($numRows);
         $stmt->execute();
         $this->_stmtError = $stmt->error;
+        $this->_stmtErrno = $stmt->errno;
         $res = $this->_dynamicBindResults($stmt);
         $this->reset();
 
@@ -555,6 +563,7 @@ class MysqliDb
 
         $stmt->execute();
         $this->_stmtError = $stmt->error;
+        $this->_stmtErrno = $stmt->errno;
         $res = $this->_dynamicBindResults($stmt);
         $this->reset();
 
@@ -676,6 +685,7 @@ class MysqliDb
         $status = $stmt->execute();
         $this->reset();
         $this->_stmtError = $stmt->error;
+        $this->_stmtErrno = $stmt->errno;
         $this->count = $stmt->affected_rows;
 
         return $status;
@@ -707,6 +717,7 @@ class MysqliDb
         $stmt = $this->_buildQuery($numRows);
         $stmt->execute();
         $this->_stmtError = $stmt->error;
+        $this->_stmtErrno = $stmt->errno;
         $this->reset();
 
         return ($stmt->affected_rows > 0);
@@ -876,7 +887,7 @@ class MysqliDb
 
         if (is_array($customFields)) {
             foreach ($customFields as $key => $value) {
-                $customFields[$key] = preg_replace("/[^-a-z0-9\.\(\),_`]+/i", '', $value);
+                $customFields[$key] = preg_replace("/[^-a-z0-9\.\(\),_` ]+/i", '', $value);
             }
 
             $orderByField = 'FIELD (' . $orderByField . ', "' . implode('","', $customFields) . '")';
@@ -1037,6 +1048,7 @@ class MysqliDb
         $stmt = $this->_buildQuery(null, $insertData);
         $status = $stmt->execute();
         $this->_stmtError = $stmt->error;
+        $this->_stmtErrno = $stmt->errno;
         $haveOnDuplicate = !empty ($this->_updateColumns);
         $this->reset();
         $this->count = $stmt->affected_rows;
@@ -1253,7 +1265,11 @@ class MysqliDb
             $value = $tableData[$column];
 
             if (!$isInsert) {
-                $this->_query .= "`" . $column . "` = ";
+                if(strpos($column,'.')===false) {
+                    $this->_query .= "`" . $column . "` = ";
+                } else {
+                    $this->_query .= str_replace('.','.`',$column) . "` = ";
+                }
             }
 
             // Subquery value
@@ -1396,7 +1412,7 @@ class MysqliDb
                     if (is_array($val)) {
                         $this->_bindParams($val);
                     } elseif ($val === null) {
-                        $this->_query .= $operator . " NULL";
+                        $this->_query .= ' ' . $operator . " NULL";
                     } elseif ($val != 'DBNULL' || $val == '0') {
                         $this->_query .= $this->_buildPair($operator, $val);
                     }
@@ -1584,6 +1600,14 @@ class MysqliDb
             return "mysqli is null";
         }
         return trim($this->_stmtError . " " . $this->mysqli()->error);
+    }
+
+    /**
+     * Method returns mysql error code
+     * @return int
+     */
+    public function getLastErrno () {
+        return $this->_stmtErrno;
     }
 
     /**
@@ -1847,11 +1871,10 @@ class MysqliDb
             return false;
         }
 
-        array_walk($tables, function (&$value, $key) {
-            $value = self::$prefix . $value;
-        });
+        foreach ($tables as $i => $value)
+            $tables[$i] = self::$prefix . $value;
         $this->where('table_schema', $this->db);
-        $this->where('table_name', $tables, 'IN');
+        $this->where('table_name', $tables, 'in');
         $this->get('information_schema.tables', $count);
         return $this->count == $count;
     }
