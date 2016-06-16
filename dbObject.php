@@ -10,18 +10,8 @@
  * @link      http://github.com/joshcam/PHP-MySQLi-Database-Class 
  * @version   2.6-master
  *
- * @method int count ()
- * @method dbObject ArrayBuilder()
- * @method dbObject JsonBuilder()
- * @method dbObject ObjectBuilder()
- * @method mixed byId (string $id, mixed $fields)
- * @method mixed get (mixed $limit, mixed $fields)
- * @method mixed getOne (mixed $fields)
- * @method mixed paginate (int $page, array $fields)
  * @method dbObject query ($query, $numRows)
  * @method dbObject rawQuery ($query, $bindParams, $sanitize)
- * @method dbObject join (string $objectName, string $key, string $joinType, string $primaryKey)
- * @method dbObject with (string $objectName)
  * @method dbObject groupBy (string $groupByField)
  * @method dbObject orderBy ($orderByField, $orderbyDirection, $customFields)
  * @method dbObject where ($whereProp, $whereValue, $operator)
@@ -33,8 +23,6 @@
  * @method dbObject commit ()
  * @method dbObject rollback ()
  * @method dbObject ping ()
- * @method string getLastError ()
- * @method string getLastQuery ()
  **/
 class dbObject {
     /**
@@ -103,13 +91,13 @@ class dbObject {
     /**
      * Primary key for an object. 'id' is a default value.
      *
-     * @var stating
+     * @var string
      */
     protected $primaryKey = 'id';
     /**
      * Table name for an object. Class name will be used by default
      *
-     * @var stating
+     * @var string
      */
     protected $dbTable;
 
@@ -134,11 +122,12 @@ class dbObject {
         if (isset($this->data[$name])) {
             $oldValue = $this->data[$name];
         }
+
         if (!isset($oldValue) || $oldValue != $value) {
             if (isset($this->_changeFlags[$name])) {
                 $this->_changeFlags[$name] += 1;
             } else {
-                $this->_changeFlags[$name] = 0;
+                $this->_changeFlags[$name] = 1;
             }
         }
 
@@ -277,6 +266,10 @@ class dbObject {
             $this->updatedAt = date("Y-m-d H:i:s");
 
         $sqlData = $this->prepareData ();
+
+        if (count($sqlData) < 2)
+            return true;
+
         if (!$this->validate ($sqlData))
             return false;
 
@@ -685,12 +678,11 @@ class dbObject {
             return $this->data;
 
         $this->_changeFlags[$this->primaryKey] = 1;
+        
         foreach ($this->data as $key => &$value) {
-            if (!$this->_changeFlags[$key]) {
+            if ($value === null || !isset($this->_changeFlags[$key]) || !$this->_changeFlags[$key])
                 continue;
-            }
             $this->_changeFlags[$key] -= 1;
-
             if ($value instanceof dbObject && $value->isNew == true) {
                 $id = $value->save();
                 if ($id)
@@ -742,5 +734,9 @@ class dbObject {
         $err = empty($this->errors) ? '' : json_encode($this->errors, JSON_UNESCAPED_UNICODE);
         $err .= $this->db->getLastError() ?: '';
         return $err;
+    }
+
+    public function getLastQuery() {
+        return $this->db->getLastQuery();
     }
 }
