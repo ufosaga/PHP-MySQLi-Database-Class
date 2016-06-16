@@ -24,7 +24,7 @@
  * @method dbObject rollback ()
  * @method dbObject ping ()
  **/
-class dbObject {
+abstract class dbObject {
     /**
      * Working instance of MysqliDb created earlier
      *
@@ -34,7 +34,7 @@ class dbObject {
     /**
      * Models path
      *
-     * @var modelPath
+     * @var string modelPath
      */
     protected static $modelPath;
     /**
@@ -60,7 +60,7 @@ class dbObject {
      * An array that holds has* objects which should be loaded togeather with main
      * object togeather with main object
      *
-     * @var string
+     * @var array
      */
     private $_with = Array();
     /**
@@ -102,6 +102,12 @@ class dbObject {
     protected $dbTable;
 
     /**
+     * Get the db fields from derived class
+     * @return array|null
+     */
+    abstract protected function fields();
+
+    /**
      * @param array $data Data to preload on object creation
      */
     public function __construct ($data = null) {
@@ -115,7 +121,8 @@ class dbObject {
 
     /**
      * Magic setter function
-     *
+     * @param string $name
+     * @param mixed $value
      * @return mixed
      */
     public function __set ($name, $value) {
@@ -137,7 +144,7 @@ class dbObject {
     /**
      * Magic getter function
      *
-     * @param $name Variable name
+     * @param string $name Variable name
      *
      * @return mixed
      */
@@ -220,7 +227,7 @@ class dbObject {
     /**
      * Helper function to create a virtual table class
      *
-     * @param string tableName Table name
+     * @param string $tableName Table name
      * @return dbObject
      */
     public static function table ($tableName) {
@@ -251,7 +258,9 @@ class dbObject {
      * @param array $data Optional update data to apply to the object
      */
     public function update ($data = null) {
-        if (empty ($this->dbFields))
+        $dbFields = $this->fields();
+
+        if (empty ($dbFields))
             return false;
 
         if (empty ($this->data[$this->primaryKey]))
@@ -305,7 +314,7 @@ class dbObject {
      * Get object by primary key.
      *
      * @access public
-     * @param $id Primary Key
+     * @param int $id Primary Key
      * @param array|string $fields Array or coma separated list of fields to fetch
      *
      * @return dbObject|array
@@ -601,7 +610,8 @@ class dbObject {
      * @param array $data
      */
     private function validate ($data) {
-        if (!$this->dbFields)
+        $dbFields = $this->fields();
+        if (!$dbFields)
             return true;
 
         if (count($data) < 2) {
@@ -610,7 +620,7 @@ class dbObject {
             return false;
         }
 
-        foreach ($this->dbFields as $key => $desc) {
+        foreach ($dbFields as $key => $desc) {
             $type = null;
             $required = false;
             if (isset ($data[$key]))
@@ -674,7 +684,8 @@ class dbObject {
         if (method_exists ($this, "preLoad"))
             $this->preLoad ($this->data);
 
-        if (!$this->dbFields)
+        $dbFields = $this->fields();
+        if (!$dbFields)
             return $this->data;
 
         $this->_changeFlags[$this->primaryKey] = 1;
@@ -691,7 +702,7 @@ class dbObject {
                     $this->errors = array_merge ($this->errors, $value->errors);
             }
 
-            if (!in_array ($key, array_keys ($this->dbFields)))
+            if (!in_array ($key, array_keys ($dbFields)))
                 continue;
 
             if (!is_array($value)) {
