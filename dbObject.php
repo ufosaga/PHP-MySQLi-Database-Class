@@ -30,7 +30,7 @@ abstract class dbObject {
      *
      * @var MysqliDb
      */
-    private $db;
+    private static $db;
     /**
      * Models path
      *
@@ -93,27 +93,30 @@ abstract class dbObject {
      *
      * @var string
      */
-    protected $primaryKey = 'id';
+    protected static $primaryKey = 'id';
     /**
      * Table name for an object. Class name will be used by default
      *
      * @var string
      */
-    protected $dbTable;
+    protected static $dbTable;
 
     /**
-     * Get the db fields from derived class
-     * @return array|null
+     * An array that holds the db fields
+     *
+     * @var array
      */
-    abstract protected function fields();
+    protected static $dbFields;
 
     /**
      * @param array $data Data to preload on object creation
      */
     public function __construct ($data = null) {
-        $this->db = MysqliDb::getInstance();
-        if (empty ($this->dbTable))
-            $this->dbTable = get_class ($this);
+        if (!self::$db)
+            self::$db = MysqliDb::getInstance();
+
+        if (!static::$dbTable)
+            static::$dbTable = get_class ($this);
 
         if ($data)
             $this->data = $data;
@@ -166,7 +169,7 @@ abstract class dbObject {
                     $key = $this->relations[$name][2];
                     $obj = new $modelName;
                     $obj->returnType = $this->returnType;
-                    return $this->data[$name] = $obj->where($key, $this->data[$this->primaryKey])->get();
+                    return $this->data[$name] = $obj->where($key, $this->data[static::$primaryKey])->get();
                     break;
                 default:
                     break;
@@ -177,16 +180,16 @@ abstract class dbObject {
             return $this->data[$name];
         }
 
-        if (property_exists ($this->db, $name))
-            return $this->db->$name;
+        if (property_exists (self::$db, $name))
+            return self::$db->$name;
     }
 
     public function __isset ($name) {
         if (isset ($this->data[$name]))
             return isset ($this->data[$name]);
 
-        if (property_exists ($this->db, $name))
-            return isset ($this->db->$name);
+        if (property_exists (self::$db, $name))
+            return isset (self::$db->$name);
     }
 
     public function __unset ($name) {
@@ -246,9 +249,9 @@ abstract class dbObject {
         if (!$this->validate ($sqlData))
             return false;
 
-        $id = $this->db->insert ($this->dbTable, $sqlData);
-        if (!empty ($this->primaryKey) && empty ($this->data[$this->primaryKey]))
-            $this->data[$this->primaryKey] = $id;
+        $id = self::$db->insert (static::$dbTable, $sqlData);
+        if (!empty (static::$primaryKey) && empty ($this->data[static::$primaryKey]))
+            $this->data[static::$primaryKey] = $id;
         $this->isNew = false;
 
         return $id;
@@ -258,12 +261,10 @@ abstract class dbObject {
      * @param array $data Optional update data to apply to the object
      */
     public function update ($data = null) {
-        $dbFields = $this->fields();
-
-        if (empty ($dbFields))
+        if (empty (self::$db))
             return false;
 
-        if (empty ($this->data[$this->primaryKey]))
+        if (empty ($this->data[static::$primaryKey]))
             return false;
 
         if ($data) {
@@ -282,8 +283,8 @@ abstract class dbObject {
         if (!$this->validate ($sqlData))
             return false;
 
-        $this->db->where ($this->primaryKey, $this->data[$this->primaryKey]);
-        return $this->db->update ($this->dbTable, $sqlData);
+        self::$db->where (static::$primaryKey, $this->data[static::$primaryKey]);
+        return self::$db->update (static::$dbTable, $sqlData);
     }
 
     /**
@@ -303,11 +304,11 @@ abstract class dbObject {
      * @return boolean Indicates success. 0 or 1.
      */
     public function delete () {
-        if (empty ($this->data[$this->primaryKey]))
+        if (empty ($this->data[static::$primaryKey]))
             return false;
 
-        $this->db->where ($this->primaryKey, $this->data[$this->primaryKey]);
-        return $this->db->delete ($this->dbTable);
+        self::$db->where (static::$primaryKey, $this->data[static::$primaryKey]);
+        return self::$db->delete (static::$dbTable);
     }
 
     /**
@@ -320,7 +321,7 @@ abstract class dbObject {
      * @return dbObject|array
      */
     protected function byId ($id, $fields = null) {
-        $this->db->where (MysqliDb::$prefix . $this->dbTable . '.' . $this->primaryKey, $id);
+        self::$db->where (MysqliDb::$prefix . static::$dbTable . '.' . static::$primaryKey, $id);
         return $this->getOne ($fields);
     }
 
@@ -334,8 +335,8 @@ abstract class dbObject {
      */
     protected function getOne ($fields = null) {
         $this->processHasOneWith ();
-        $results = $this->db->ArrayBuilder()->getOne ($this->dbTable, $fields);
-        if ($this->db->count == 0)
+        $results = self::$db->ArrayBuilder()->getOne (static::$dbTable, $fields);
+        if (self::$db->count == 0)
             return null;
 
         $this->processArrays ($results);
@@ -365,8 +366,8 @@ abstract class dbObject {
     protected function get ($limit = null, $fields = null) {
         $objects = Array ();
         $this->processHasOneWith ();
-        $results = $this->db->ArrayBuilder()->get ($this->dbTable, $limit, $fields);
-        if ($this->db->count == 0)
+        $results = self::$db->ArrayBuilder()->get (static::$dbTable, $limit, $fields);
+        if (self::$db->count == 0)
             return null;
 
         foreach ($results as &$r) {
@@ -426,11 +427,11 @@ abstract class dbObject {
             $primaryKey = MysqliDb::$prefix . $joinObj->dbTable . "." . $joinObj->primaryKey;
 		
         if (!strchr ($key, '.'))
-            $joinStr = MysqliDb::$prefix . $this->dbTable . ".{$key} = " . $primaryKey;
+            $joinStr = MysqliDb::$prefix . static::$dbTable . ".{$key} = " . $primaryKey;
         else
             $joinStr = MysqliDb::$prefix . "{$key} = " . $primaryKey;
 
-        $this->db->join ($joinObj->dbTable, $joinStr, $joinType);
+        self::$db->join ($joinObj->dbTable, $joinStr, $joinType);
         return $this;
     }
 
@@ -440,7 +441,7 @@ abstract class dbObject {
      * @return int
      */
     protected function count () {
-        $res = $this->db->ArrayBuilder()->getValue ($this->dbTable, "count(*)");
+        $res = self::$db->ArrayBuilder()->getValue (static::$dbTable, "count(*)");
         if (!$res)
             return 0;
         return $res;
@@ -455,9 +456,9 @@ abstract class dbObject {
      * @return array
      */
     private function paginate ($page, $fields = null) {
-        $this->db->pageLimit = self::$pageLimit;
-        $res = $this->db->paginate ($this->dbTable, $page, $fields);
-        self::$totalPages = $this->db->totalPages;
+        self::$db->pageLimit = self::$pageLimit;
+        $res = self::$db->paginate (static::$dbTable, $page, $fields);
+        self::$totalPages = self::$db->totalPages;
         return $res;
     }
 
@@ -475,7 +476,7 @@ abstract class dbObject {
         if (method_exists ($this, $method))
             return call_user_func_array (array ($this, $method), $arg);
 
-        call_user_func_array (array ($this->db, $method), $arg);
+        call_user_func_array (array (self::$db, $method), $arg);
         return $this;
     }
 
@@ -585,7 +586,7 @@ abstract class dbObject {
             if (isset ($opts[2]))
                 $key = $opts[2];
             if ($relationType == 'hasone') {
-                $this->db->setQueryOption ("MYSQLI_NESTJOIN");
+                self::$db->setQueryOption ("MYSQLI_NESTJOIN");
                 $this->join ($modelName, $key);
             }
         }
@@ -610,17 +611,15 @@ abstract class dbObject {
      * @param array $data
      */
     private function validate ($data) {
-        $dbFields = $this->fields();
-        if (!$dbFields)
+        if (!static::$dbFields)
             return true;
 
         if (count($data) < 2) {
             $this->errors[] = 'Invalid fields count:' . var_export($data, true);
-            T::say(json_encode($this->errors, JSON_UNESCAPED_UNICODE));
             return false;
         }
 
-        foreach ($dbFields as $key => $desc) {
+        foreach (static::$dbFields as $key => $desc) {
             $type = null;
             $required = false;
             if (isset ($data[$key]))
@@ -637,7 +636,7 @@ abstract class dbObject {
                 $required = true;
 
 //            if ($required && strlen ($value) == 0) {
-//                $this->errors[] = Array ($this->dbTable . "." . $key => "is required");
+//                $this->errors[] = Array (static::$dbTable . "." . $key => "is required");
 //                continue;
 //            }
 
@@ -668,7 +667,7 @@ abstract class dbObject {
                 continue;
 
             if (!preg_match ($regexp, $value)) {
-                $this->errors[] = Array ($this->dbTable . "." . $key => "$type validation failed");
+                $this->errors[] = Array (static::$dbTable . "." . $key => "$type validation failed");
                 continue;
             }
         }
@@ -684,11 +683,10 @@ abstract class dbObject {
         if (method_exists ($this, "preLoad"))
             $this->preLoad ($this->data);
 
-        $dbFields = $this->fields();
-        if (!$dbFields)
+        if (!static::$dbFields)
             return $this->data;
 
-        $this->_changeFlags[$this->primaryKey] = 1;
+        $this->_changeFlags[static::$primaryKey] = 1;
         
         foreach ($this->data as $key => &$value) {
             if ($value === null || !isset($this->_changeFlags[$key]) || !$this->_changeFlags[$key])
@@ -702,7 +700,7 @@ abstract class dbObject {
                     $this->errors = array_merge ($this->errors, $value->errors);
             }
 
-            if (!in_array ($key, array_keys ($dbFields)))
+            if (!in_array ($key, array_keys (static::$dbFields)))
                 continue;
 
             if (!is_array($value)) {
@@ -743,11 +741,11 @@ abstract class dbObject {
 
     public function getLastError() {
         $err = empty($this->errors) ? '' : json_encode($this->errors, JSON_UNESCAPED_UNICODE);
-        $err .= $this->db->getLastError() ?: '';
+        $err .= self::$db->getLastError() ?: '';
         return $err;
     }
 
     public function getLastQuery() {
-        return $this->db->getLastQuery();
+        return self::$db->getLastQuery();
     }
 }
